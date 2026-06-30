@@ -1,7 +1,7 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 工作日北京时间 12:15 和 19:15
+  # 定时触发 - 工作日北京时间 12:15 和 19:15，自动运行 stocks-only
   schedule:
     - cron: '15 4 * * 1-5'      # 周一到周五，UTC 04:15 = 北京时间 12:15
     - cron: '15 11 * * 1-5'     # 周一到周五，UTC 11:15 = 北京时间 19:15
@@ -420,7 +420,7 @@ jobs:
           fi
 
           # 判断运行模式
-          MODE="${{ github.event.inputs.mode || 'full' }}"
+          MODE="${{ github.event.inputs.mode || 'stocks-only' }}"
           
           echo "=========================================="
           echo "🚀 A股自选股智能分析系统"
