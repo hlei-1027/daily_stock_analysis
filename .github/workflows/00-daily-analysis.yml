@@ -504,6 +504,108 @@ jobs:
             python main.py $FORCE_RUN_ARG
           fi
       
+      - name: 兜底发送邮件报告
+        if: always()
+        env:
+          EMAIL_SENDER: ${{ vars.EMAIL_SENDER || secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVERS: ${{ vars.EMAIL_RECEIVERS || secrets.EMAIL_RECEIVERS }}
+          EMAIL_SENDER_NAME: ${{ vars.EMAIL_SENDER_NAME || secrets.EMAIL_SENDER_NAME || 'daily_stock_analysis股票分析助手' }}
+          STOCK_LIST_CONFIG: ${{ vars.STOCK_LIST || secrets.STOCK_LIST }}
+        run: |
+          python - <<'PY'
+          import os
+          import smtplib
+          from email.header import Header
+          from email.mime.text import MIMEText
+          from email.utils import formataddr
+          from pathlib import Path
+
+          sender = (os.getenv("EMAIL_SENDER") or "").strip()
+          password = (os.getenv("EMAIL_PASSWORD") or "").strip()
+          receivers_raw = (os.getenv("EMAIL_RECEIVERS") or sender).strip()
+          sender_name = (os.getenv("EMAIL_SENDER_NAME") or "daily_stock_analysis股票分析助手").strip()
+          stock_list = (os.getenv("STOCK_LIST_CONFIG") or os.getenv("STOCK_LIST") or "").strip()
+          run_number = os.getenv("GITHUB_RUN_NUMBER", "")
+          run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY', '')}/actions/runs/{os.getenv('GITHUB_RUN_ID', '')}"
+
+          report_dir = Path("reports")
+          candidates = []
+          if report_dir.exists():
+            for pattern in ("*.md", "*.html", "*.txt"):
+              candidates.extend(report_dir.glob(pattern))
+          candidates = [p for p in candidates if p.is_file()]
+
+          print("========== 兜底邮件诊断 ==========")
+          print(f"报告文件数量: {len(candidates)}")
+          print(f"EMAIL_SENDER: {'已配置' if sender else '未配置'}")
+          print(f"EMAIL_PASSWORD: {'已配置' if password else '未配置'}")
+          print(f"EMAIL_RECEIVERS: {'已配置' if receivers_raw else '未配置'}")
+          print(f"自选股/ETF: {stock_list or '未读取到'}")
+
+          if not candidates:
+            print("未找到 reports 目录下的报告文件，跳过兜底邮件。")
+            raise SystemExit(0)
+          if not sender or not password:
+            print("邮箱发送配置不完整，无法发送兜底邮件。")
+            raise SystemExit(1)
+
+          latest = max(candidates, key=lambda p: p.stat().st_mtime)
+          content = latest.read_text(encoding="utf-8", errors="replace")
+          receivers = [x.strip() for x in receivers_raw.replace(";", ",").replace("\n", ",").split(",") if x.strip()]
+          if not receivers:
+            receivers = [sender]
+
+          body = f"""本邮件由 GitHub Actions 兜底发送。
+
+          运行编号: {run_number}
+          自选股/ETF: {stock_list or '未读取到'}
+          运行链接: {run_url}
+          报告文件: {latest.name}
+
+          ------------------------------
+
+          {content}
+          """
+
+          domain = sender.split("@")[-1].lower()
+          smtp_configs = {
+            "qq.com": ("smtp.qq.com", 465, "ssl"),
+            "foxmail.com": ("smtp.qq.com", 465, "ssl"),
+            "163.com": ("smtp.163.com", 465, "ssl"),
+            "126.com": ("smtp.126.com", 465, "ssl"),
+            "gmail.com": ("smtp.gmail.com", 587, "tls"),
+            "outlook.com": ("smtp-mail.outlook.com", 587, "tls"),
+            "hotmail.com": ("smtp-mail.outlook.com", 587, "tls"),
+            "live.com": ("smtp-mail.outlook.com", 587, "tls"),
+          }
+          if domain not in smtp_configs:
+            print(f"暂不支持自动识别该邮箱域名: {domain}")
+            raise SystemExit(1)
+
+          host, port, mode = smtp_configs[domain]
+          msg = MIMEText(body, "plain", "utf-8")
+          msg["From"] = formataddr((str(Header(sender_name, "utf-8")), sender))
+          msg["To"] = ", ".join(receivers)
+          msg["Subject"] = Header(f"ETF/股票分析报告 - Run #{run_number}", "utf-8")
+
+          print(f"准备发送兜底邮件: smtp={host}:{port}, receivers={receivers}, report={latest.name}")
+          if mode == "ssl":
+            server = smtplib.SMTP_SSL(host, port, timeout=30)
+          else:
+            server = smtplib.SMTP(host, port, timeout=30)
+            server.starttls()
+          try:
+            server.login(sender, password)
+            server.sendmail(sender, receivers, msg.as_string())
+            print("兜底邮件发送成功")
+          finally:
+            try:
+              server.quit()
+            except Exception:
+              pass
+          PY
+      
       - name: 上传分析报告
         uses: actions/upload-artifact@v6
         if: always()
