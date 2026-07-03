@@ -1,10 +1,10 @@
 ﻿name: 每日股票分析
 
 on:
-  # 定时触发 - 工作日北京时间 12:15 和 19:15，自动运行 stocks-only
+  # 定时触发 - 工作日北京时间 11:17 和 17:23，自动运行 stocks-only
   schedule:
-    - cron: '0 4 * * 1-5'      # 周一到周五，UTC 04:15 = 北京时间 12:15
-    - cron: '0 10 * * 1-5'     # 周一到周五，UTC 11:15 = 北京时间 19:15
+    - cron: '17 3 * * 1-5'     # 周一到周五，UTC 03:17 = 北京时间 11:17
+    - cron: '23 9 * * 1-5'     # 周一到周五，UTC 09:23 = 北京时间 17:23
   
   # 手动触发
   workflow_dispatch:
@@ -450,6 +450,7 @@ jobs:
           fi
           echo ""
           echo "【搜索引擎】"
+          echo "  Anspire Search: $([ -n "$ANSPIRE_API_KEYS" ] && echo '✅ 已配置（优先使用）' || echo '⚪ 未配置')"
           echo "  Bocha API Keys: $([ -n "$BOCHA_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Tavily API Keys: $([ -n "$TAVILY_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  SerpAPI Keys: $([ -n "$SERPAPI_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
@@ -525,4 +526,3 @@ jobs:
             echo "📜 最近日志（最后 30 行）:"
             tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志"
           fi
-
